@@ -1,0 +1,690 @@
+---
+title: "MATH-517: Assignment 3
+author: "Santiago Rivadeneira Quintero"
+date: '03/10/2025'
+format: 
+  html:
+    toc: true
+    number-sections: true
+    code-fold: true
+    self-contained: true
+  pdf:
+    toc: true
+    number-sections: true
+    code-fold: true
+editor: visual
+---
+
+\newpage
+
+# Theoretical Exercise
+
+## Local linear regression is a linear smoother
+
+**Setup.** Fix a target point $x$. Write $$
+\Delta_i := X_i - x,\qquad k_i := K\left(\frac{X_i - x}{h}\right).
+$$ Let $$
+Z=\begin{bmatrix}
+1 & \Delta_1\\
+\vdots & \vdots\\
+1 & \Delta_n
+\end{bmatrix},\quad
+W=\operatorname{diag}(k_1,\dots,k_n),\quad
+Y=(Y_1,\dots,Y_n)^\top .
+$$ The WLS estimator is $$
+\hat\beta(x)=\begin{bmatrix}\hat\beta_0(x)\\ \hat\beta_1(x)\end{bmatrix}
+=(Z^\top W Z)^{-1} Z^\top W Y.
+$$ The fitted value is $\hat m(x)=\hat\beta_0(x)=e_1^\top\hat\beta(x)$ with $e_1=(1,0)^\top$, so $$
+\boxed{\hat m(x)=e_1^\top (Z^\top W Z)^{-1} Z^\top W\,Y
+=\sum_{i=1}^n w_{ni}(x)\,Y_i}
+$$ with $$
+\boxed{w_{ni}(x)=e_1^\top (Z^\top W Z)^{-1} Z^\top W\,e_i}
+$$ which depends only on $x,\{X_i\},K,h$ and not on $\{Y_i\}$. This proves that $\hat m(x)$ is a linear smoother.
+
+## Explicit weights in terms of $S_{n,k}(x)$ ($k=0,1,2$)
+
+Define $$
+S_{n,k}(x)=\frac{1}{nh}\sum_{i=1}^n \Delta_i^k\,k_i,\qquad k=0,1,2.
+$$ Then $$
+Z^\top W Z=
+\begin{bmatrix}
+\sum k_i & \sum \Delta_i k_i\\
+\sum \Delta_i k_i & \sum \Delta_i^2 k_i
+\end{bmatrix}
+=nh\begin{bmatrix}
+S_{n,0} & S_{n,1}\\
+S_{n,1} & S_{n,2}
+\end{bmatrix}.
+$$ Using the $2\times 2$ inverse, $$
+(Z^\top W Z)^{-1}
+=\frac{1}{nh}\cdot
+\frac{1}{S_{n,0}S_{n,2}-S_{n,1}^2}
+\begin{bmatrix}
+S_{n,2} & -S_{n,1}\\
+-S_{n,1} & S_{n,0}
+\end{bmatrix}.
+$$ Moreover $Z^\top W e_i=\begin{bmatrix}k_i\\ \Delta_i k_i\end{bmatrix}$. Taking the first row, $$
+\boxed{
+w_{ni}(x)=
+\frac{ k_i\big(S_{n,2}(x)-\Delta_i\,S_{n,1}(x)\big)}
+{nh\big(S_{n,0}(x)S_{n,2}(x)-S_{n,1}(x)^2\big)}},\qquad
+k_i=K\left(\frac{X_i-x}{h}\right),\ \Delta_i=X_i-x.
+$$
+
+*A fully equivalent route via normal equations.* Solving the two weighted normal equations gives $$
+\hat\beta_0(x)=\frac{S_{n,2}T_0-S_{n,1}T_1}{S_{n,0}S_{n,2}-S_{n,1}^2},\quad
+T_0=\frac{1}{nh}\sum k_iY_i,\quad T_1=\frac{1}{nh}\sum \Delta_i k_iY_i,
+$$ which expands to the same weights as above.
+
+## The weights sum to one
+
+Summing the explicit weights and using $\sum k_i=nh\,S_{n,0}$ and $\sum \Delta_i k_i=nh\,S_{n,1}$, $$
+\sum_{i=1}^n w_{ni}(x)
+=\frac{ S_{n,2}\sum k_i - S_{n,1}\sum \Delta_i k_i }
+{ nh\,(S_{n,0}S_{n,2}-S_{n,1}^2)}
+=\frac{ S_{n,2}(nh\,S_{n,0}) - S_{n,1}(nh\,S_{n,1}) }
+{ nh\,(S_{n,0}S_{n,2}-S_{n,1}^2)}
+=1.
+$$
+
+**Nondegeneracy condition.** These formulas hold whenever $S_{n,0}S_{n,2}-S_{n,1}^2>0$, equivalently $(Z^\top W Z)$ is invertible. This requires at least two distinct $X_i$ with positive kernel weight around $x$.
+
+**Remark.** Weights can be negative near boundaries, but they always sum to one, which ensures exact reproduction of constants.
+
+\newpage
+
+# Practical Exercise
+
+## Aim of the Simulation Study
+
+The objective of this simulation study is to assess the behavior of the optimal bandwidth $h_{AMISE}$ for the local linear regression estimator under different configurations. Specifically, we investigate:
+
+1.  The impact of sample size $n$ on the optimal bandwidth
+2.  The effect of the number of blocks $N$ used in estimating the unknown quantities $\sigma^2$ and $\theta_{22}$
+3.  The influence of the covariate distribution $X$ (through the parameters $\alpha$ and $\beta$ of the Beta distribution) on the optimal bandwidth
+
+## Description of Quantities and Configuration
+
+**Data generation model:**
+
+-   **Covariate:** $X \sim \text{Beta}(\alpha, \beta)$ on support $[0,1]$
+-   **Regression function:** $m(x) = \sin\left\{\left(\frac{x}{3}+0.1\right)^{-1}\right\}$
+-   **Error term:** $\epsilon \sim \mathcal{N}(0, \sigma^2)$ with $\sigma^2 = 0.15$
+-   **Response:** $Y = m(X) + \epsilon$
+
+We chose $\sigma^2 = 0.15$ as a compromise between visibility of the pattern and realistic noise levels. This value allows the nonlinear structure of $m(x)$ to be clearly visible while maintaining realistic variability.
+
+**Kernel and optimal bandwidth:**
+
+We use the quartic (biweight) kernel $K(u) = \frac{15}{16}(1-u^2)^2 \mathbb{1}_{|u| \leq 1}$ as specified.
+
+The optimal bandwidth minimizing the AMISE is given by: $$h_{AMISE} = n^{-1/5} \left( \frac{35 \sigma^2 |\text{supp}(X)|}{\theta_{22}} \right)^{1/5}$$
+
+where $\theta_{22} = \int \{m''(x)\}^2 f_X(x)\, dx$ and $|\text{supp}(X)| = 1$ for the Beta distribution on $[0,1]$.
+
+**Estimation method:**
+
+Following Ruppert et al. (1995), we use the block method:
+
+1.  Divide the ordered sample into $N$ blocks of approximately equal size
+2.  In each block $j$, fit a 4th degree polynomial: $$y_i = \beta_{0j} + \beta_{1j} x_i + \beta_{2j} x_i^2 + \beta_{3j} x_i^3 + \beta_{4j} x_i^4 + \epsilon_i$$
+3.  Estimate $\theta_{22}$ and $\sigma^2$ according to: $$\hat{\theta}_{22}(N) = \frac{1}{n} \sum_{i=1}^n \sum_{j=1}^N \{\hat{m}_j''(X_i)\}^2 \mathbb{1}_{X_i \in \mathcal{X}_j}$$ $$\hat{\sigma}^2(N) = \frac{1}{n-5N} \sum_{i=1}^n \sum_{j=1}^N \{ Y_i - \hat{m}_j(X_i) \}^2 \mathbb{1}_{X_i \in \mathcal{X}_j}$$
+
+where $\hat{m}_j''(x) = 2\hat{\beta}_{2j} + 6\hat{\beta}_{3j}x + 12\hat{\beta}_{4j}x^2$ is the second derivative of the fitted polynomial in block $j$.
+
+The optimal number of blocks is selected using Mallow's $C_p$ criterion: $$C_p(N) = \frac{\text{RSS}(N)}{\text{RSS}(N_{\max})/(n-5N_{\max})} - (n - 10N)$$ where $N_{\max} = \max\{\min(\lfloor n/20 \rfloor, 5), 1\}$ as per Ruppert et al. (1995).
+
+```{r setup}
+#| echo: false
+#| message: false
+#| warning: false
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gridExtra)
+library(knitr)
+
+set.seed(2024)
+
+# True regression function
+m_true <- function(x) {
+  sin((x/3 + 0.1)^(-1))
+}
+
+# Quartic (biweight) kernel
+K_quartic <- function(u) {
+  ifelse(abs(u) <= 1, (15/16) * (1 - u^2)^2, 0)
+}
+
+# Generate data
+generate_data <- function(n, alpha = 2, beta = 2, sigma2 = 0.15) {
+  if (n < 10) stop("Sample size must be at least 10")
+  if (alpha <= 0 || beta <= 0) stop("Beta parameters must be positive")
+  if (sigma2 <= 0) stop("Variance must be positive")
+  
+  X <- rbeta(n, alpha, beta)
+  epsilon <- rnorm(n, 0, sqrt(sigma2))
+  Y <- m_true(X) + epsilon
+  data.frame(X = X, Y = Y)
+}
+
+# Block method to estimate theta_22 and sigma^2
+block_method <- function(data, N) {
+  n <- nrow(data)
+  
+  if (N < 1) stop("N must be at least 1")
+  if (n - 5*N <= 0) stop(paste("N too large: need n - 5*N > 0"))
+  
+  data <- data[order(data$X), ]
+  
+  if (N == 1) {
+    data$block <- rep(1, n)
+  } else {
+    data$block <- cut(rank(data$X, ties.method = "first"), 
+                      breaks = N, labels = FALSE, include.lowest = TRUE)
+  }
+  
+  theta_22_sum <- 0
+  sigma2_sum <- 0
+  
+  for (j in 1:N) {
+    block_data <- data[data$block == j, ]
+    n_block <- nrow(block_data)
+    
+    if (n_block >= 6) {
+      model <- lm(Y ~ poly(X, 4, raw = TRUE), data = block_data)
+      beta_hat <- coef(model)
+      
+      X_block <- block_data$X
+      Y_block <- block_data$Y
+      Y_hat <- fitted(model)
+      
+      m_j_double_prime <- 2*beta_hat[3] + 6*beta_hat[4]*X_block + 12*beta_hat[5]*X_block^2
+      
+      theta_22_sum <- theta_22_sum + sum(m_j_double_prime^2)
+      sigma2_sum <- sigma2_sum + sum((Y_block - Y_hat)^2)
+    }
+  }
+  
+  theta_22_hat <- theta_22_sum / n
+  sigma2_hat <- sigma2_sum / (n - 5*N)
+  
+  list(theta_22 = theta_22_hat, sigma2 = sigma2_hat, RSS = sigma2_sum)
+}
+
+# Compute h_AMISE
+compute_h_AMISE <- function(n, sigma2_hat, theta_22_hat, support_length = 1) {
+  if (theta_22_hat <= 0) theta_22_hat <- abs(theta_22_hat)
+  if (sigma2_hat <= 0) sigma2_hat <- abs(sigma2_hat)
+  
+  n^(-1/5) * (35 * sigma2_hat * support_length / theta_22_hat)^(1/5)
+}
+
+# Mallow's Cp for N selection
+mallows_cp <- function(data, N_values = NULL) {
+  n <- nrow(data)
+  N_max <- max(min(floor(n / 20), 5), 1)
+  
+  if (n - 5*N_max <= 0) N_max <- max(floor((n - 1) / 5), 1)
+  if (is.null(N_values)) N_values <- 1:N_max
+  
+  RSS_values <- numeric(length(N_values))
+  
+  for (i in seq_along(N_values)) {
+    N <- N_values[i]
+    if (N >= 1 && N <= N_max && n - 5*N > 0) {
+      tryCatch({
+        result <- block_method(data, N)
+        RSS_values[i] <- result$RSS
+      }, error = function(e) {
+        RSS_values[i] <- NA
+      })
+    } else {
+      RSS_values[i] <- NA
+    }
+  }
+  
+  RSS_N_max <- tryCatch(block_method(data, N_max)$RSS, error = function(e) NA)
+  
+  if (is.na(RSS_N_max) || RSS_N_max <= 0) {
+    return(data.frame(N = N_values, Cp = NA, RSS = RSS_values))
+  }
+  
+  Cp_values <- RSS_values / (RSS_N_max / (n - 5*N_max)) - (n - 10*N_values)
+  data.frame(N = N_values, Cp = Cp_values, RSS = RSS_values)
+}
+
+# Find optimal N
+find_optimal_N <- function(data) {
+  n <- nrow(data)
+  N_max <- max(min(floor(n / 20), 5), 1)
+  
+  if (n - 5*N_max <= 0) N_max <- max(floor((n - 1) / 5), 1)
+  
+  N_values <- 1:N_max
+  cp_results <- mallows_cp(data, N_values)
+  cp_results <- cp_results[!is.na(cp_results$Cp), ]
+  
+  if (nrow(cp_results) > 0) {
+    return(cp_results$N[which.min(cp_results$Cp)])
+  } else {
+    return(1)
+  }
+}
+```
+
+## Illustrative Example
+
+Before diving into the simulation studies, we first illustrate the data generation mechanism and the block method with a concrete example.
+
+```{r example}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-width: 12
+#| fig-height: 4
+#| fig-cap: "Illustrative example of the data generation process and block method. Left: Scatter plot showing data generated from m(x) with Beta(2,2) covariate distribution. The red curve shows the true regression function. Right: Beta(2,2) density function showing the distribution of the covariate X."
+
+set.seed(123)
+example_data <- generate_data(n = 300, alpha = 2, beta = 2, sigma2 = 0.15)
+
+p_ex1 <- ggplot(example_data, aes(x = X, y = Y)) +
+  geom_point(alpha = 0.6, size = 2, color = "steelblue") +
+  stat_function(fun = m_true, color = "darkred", linewidth = 1.5) +
+  labs(title = "Data Generation Example",
+       subtitle = "n=300, Beta(2,2), σ²=0.15",
+       x = "X", y = "Y") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 12))
+
+x_seq <- seq(0, 1, length.out = 500)
+beta_density <- data.frame(x = x_seq, density = dbeta(x_seq, 2, 2))
+
+p_ex2 <- ggplot(beta_density, aes(x = x, y = density)) +
+  geom_line(color = "darkblue", linewidth = 1.5) +
+  geom_ribbon(aes(ymin = 0, ymax = density), fill = "steelblue", alpha = 0.3) +
+  labs(title = "Covariate Distribution",
+       subtitle = "Beta(2,2) density",
+       x = "x", y = "Density f(x)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 12))
+
+grid.arrange(p_ex1, p_ex2, ncol = 2)
+```
+
+\newpage
+
+## Study 1: Effect of the Number of Blocks $N$ on $h_{AMISE}$
+
+We first investigate how the estimated optimal bandwidth varies when we change the number of blocks $N$ used in estimating $\sigma^2$ and $\theta_{22}$.
+
+```{r study1}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-width: 14
+#| fig-height: 10
+#| fig-cap: "Effect of the number of blocks N on h_AMISE estimation. Top left: h_AMISE vs N for different sample sizes. Top right: Mallow's Cp criterion showing the selection of optimal N. Bottom panels: Evolution of θ̂₂₂ and σ̂² estimates with N. Dashed vertical lines indicate optimal N according to Mallow's Cp."
+
+n_values <- c(200, 500, 1000)
+sigma2_true <- 0.15
+
+results_N <- list()
+cp_results_all <- list()
+
+for (n_val in n_values) {
+  set.seed(42 + n_val)
+  data <- generate_data(n_val, alpha = 2, beta = 2, sigma2 = sigma2_true)
+  
+  N_max <- max(min(floor(n_val / 20), 5), 1)
+  N_sequence <- 1:N_max
+  
+  h_AMISE_values <- numeric(length(N_sequence))
+  theta22_values <- numeric(length(N_sequence))
+  sigma2_values <- numeric(length(N_sequence))
+  
+  for (i in seq_along(N_sequence)) {
+    N <- N_sequence[i]
+    if (n_val - 5*N > 0) {
+      tryCatch({
+        est <- block_method(data, N)
+        h_AMISE_values[i] <- compute_h_AMISE(n_val, est$sigma2, est$theta_22)
+        theta22_values[i] <- est$theta_22
+        sigma2_values[i] <- est$sigma2
+      }, error = function(e) {
+        h_AMISE_values[i] <- NA
+        theta22_values[i] <- NA
+        sigma2_values[i] <- NA
+      })
+    } else {
+      h_AMISE_values[i] <- NA
+      theta22_values[i] <- NA
+      sigma2_values[i] <- NA
+    }
+  }
+  
+  N_opt <- find_optimal_N(data)
+  
+  cp_data <- mallows_cp(data, N_sequence)
+  cp_results_all[[paste0("n=", n_val)]] <- cp_data %>%
+    mutate(n = n_val, N_opt = N_opt)
+  
+  results_N[[paste0("n=", n_val)]] <- data.frame(
+    N = N_sequence,
+    h_AMISE = h_AMISE_values,
+    theta_22 = theta22_values,
+    sigma2 = sigma2_values,
+    n = n_val,
+    N_opt = N_opt
+  )
+}
+
+df_N <- bind_rows(results_N) %>% filter(!is.na(h_AMISE))
+df_cp <- bind_rows(cp_results_all) %>% filter(!is.na(Cp))
+
+p1 <- ggplot(df_N, aes(x = N, y = h_AMISE, color = factor(n), group = n)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_vline(data = df_N %>% group_by(n) %>% slice(1), 
+             aes(xintercept = N_opt, color = factor(n)), 
+             linetype = "dashed", linewidth = 0.8, alpha = 0.7) +
+  labs(title = "Study 1: Bandwidth vs Number of Blocks",
+       x = "Number of blocks (N)", 
+       y = expression(h[AMISE]),
+       color = "Sample size (n)") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", size = 10))
+
+p2 <- ggplot(df_cp, aes(x = N, y = Cp, color = factor(n), group = n)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "gray50") +
+  geom_vline(data = df_cp %>% group_by(n) %>% slice(1), 
+             aes(xintercept = N_opt, color = factor(n)), 
+             linetype = "dashed", linewidth = 0.8, alpha = 0.7) +
+  labs(title = "Study 1: Mallow's Cp Criterion",
+       x = "Number of blocks (N)", 
+       y = expression(C[p]),
+       color = "Sample size (n)") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", size = 10))
+
+p3 <- ggplot(df_N, aes(x = N, y = theta_22, color = factor(n), group = n)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  labs(title = "Study 1: Curvature Estimate",
+       x = "Number of blocks (N)", 
+       y = expression(hat(theta)[22]),
+       color = "Sample size (n)") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", size = 10))
+
+p4 <- ggplot(df_N, aes(x = N, y = sigma2, color = factor(n), group = n)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  geom_hline(yintercept = sigma2_true, linetype = "dashed", 
+             color = "black", linewidth = 0.8, alpha = 0.7) +
+  annotate("text", x = 1.5, y = sigma2_true * 1.15, 
+           label = paste("True σ² =", sigma2_true), 
+           color = "black", size = 3.5, hjust = 0) +
+  labs(title = "Study 1: Variance Estimate",
+       x = "Number of blocks (N)", 
+       y = expression(hat(sigma)^2),
+       color = "Sample size (n)") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold", size = 10))
+
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+**Key observations on the effect of N:**
+
+-   **Behavior of** $h_{AMISE}$ as $N$ grows: The bandwidth estimate shows non-monotonic behavior with $N$. For small $N$ (large blocks), the polynomial approximation is globally smooth but may not capture local curvature well, leading to biased $\hat{\theta}_{22}$. For large $N$ (small blocks), we have better local approximations but increased variance in the estimates. The optimal $N$ (marked by dashed lines) balances this bias-variance trade-off.
+
+-   **Mallow's** $C_p$ criterion: The $C_p$ curves show clear minima, validating its use for automatic $N$ selection. The criterion successfully identifies the value of $N$ that provides the best compromise between model complexity and fit quality.
+
+-   **Should** $N$ depend on $n$? Yes, absolutely. As shown in the plots, larger sample sizes allow for (and benefit from) more blocks. The formula $N_{max} = \max\{\min(\lfloor n/20 \rfloor, 5), 1\}$ reflects this dependence while preventing over-fragmentation.
+
+-   **Estimates of** $\theta_{22}$ and $\sigma^2$: The variance estimator $\hat{\sigma}^2$ is remarkably stable across different $N$ values and hovers close to the true value (horizontal dashed line). The curvature estimator $\hat{\theta}_{22}$ shows more variation, reflecting the sensitivity of second derivatives to the polynomial fit quality.
+
+\newpage
+
+## Study 2: Effect of Sample Size $n$ on $h_{AMISE}$
+
+We now evaluate how the optimal bandwidth scales with sample size, using the optimal $N$ selected by Mallow's $C_p$ for each $n$.
+
+```{r study2}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-width: 14
+#| fig-height: 12
+#| fig-cap: "Effect of sample size n on h_AMISE. Top: Log-log relationship between n and h_AMISE, with fitted regression line (red) and theoretical slope -1/5 (dashed black line). Middle: Optimal N values selected by Mallow's Cp for each sample size. Bottom: Evolution of θ̂₂₂ and σ̂² estimates with increasing sample size."
+#| out-width: "100%"
+
+n_sequence <- seq(100, 2000, by = 50)
+
+results_n <- data.frame(
+  n = numeric(),
+  h_AMISE = numeric(),
+  N_opt = numeric(),
+  theta_22 = numeric(),
+  sigma2 = numeric()
+)
+
+for (n_val in n_sequence) {
+  tryCatch({
+    set.seed(42 + n_val)
+    data <- generate_data(n_val, alpha = 2, beta = 2, sigma2 = sigma2_true)
+    N_opt <- find_optimal_N(data)
+    
+    est <- block_method(data, N_opt)
+    h_AMISE <- compute_h_AMISE(n_val, est$sigma2, est$theta_22)
+    
+    results_n <- rbind(results_n, data.frame(
+      n = n_val,
+      h_AMISE = h_AMISE,
+      N_opt = N_opt,
+      theta_22 = est$theta_22,
+      sigma2 = est$sigma2
+    ))
+  }, error = function(e) {})
+}
+
+fit <- lm(log(h_AMISE) ~ log(n), data = results_n)
+slope_est <- coef(fit)[2]
+intercept_est <- coef(fit)[1]
+r_squared <- summary(fit)$r.squared
+
+p_log <- ggplot(results_n, aes(x = log(n), y = log(h_AMISE))) +
+  geom_point(size = 3, color = "steelblue", alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred", 
+              linewidth = 1.2, fill = "pink", alpha = 0.3) +
+  geom_abline(slope = -1/5, intercept = intercept_est, 
+              linetype = "dashed", color = "black", linewidth = 1) +
+  annotate("text", x = min(log(results_n$n)) + 0.3, y = min(log(results_n$h_AMISE)) + 0.2,
+           label = sprintf("Slope: %.4f\nTheory: -0.2\nR²: %.3f", 
+                         slope_est, r_squared),
+           hjust = 0, vjust = 0, size = 3.5, color = "darkred", fontface = "bold") +
+  labs(title = "Study 2: Log-log Relationship",
+       subtitle = "Verifying theoretical n^(-1/5) relationship",
+       x = "log(n)", 
+       y = expression(log(h[AMISE]))) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 10))
+
+p_n_opt <- ggplot(results_n, aes(x = n, y = N_opt)) +
+  geom_line(color = "steelblue", linewidth = 1.5) +
+  geom_point(size = 3, color = "darkblue") +
+  geom_hline(yintercept = 5, linetype = "dashed", color = "gray50", alpha = 0.7) +
+  annotate("text", x = 200, y = 4.7,
+           label = "N_max = 5", size = 3.5, color = "gray30", hjust = 0) +
+  labs(title = "Study 2: Optimal N vs Sample Size",
+       x = "Sample size (n)", 
+       y = "Optimal N (Mallow's Cp)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 10))
+
+p_theta <- ggplot(results_n, aes(x = n, y = theta_22)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_point(size = 2, color = "darkblue", alpha = 0.6) +
+  labs(title = "Study 2: Curvature Estimate vs Sample Size",
+       x = "Sample size (n)", 
+       y = expression(hat(theta)[22])) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 10))
+
+p_sigma <- ggplot(results_n, aes(x = n, y = sigma2)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_point(size = 2, color = "darkblue", alpha = 0.6) +
+  geom_hline(yintercept = sigma2_true, linetype = "dashed", 
+             color = "darkred", linewidth = 1) +
+  annotate("text", x = 200, y = sigma2_true * 1.12,
+           label = paste("True σ² =", sigma2_true), 
+           color = "darkred", size = 3.5, hjust = 0) +
+  labs(title = "Study 2: Variance Estimate vs Sample Size",
+       x = "Sample size (n)", 
+       y = expression(hat(sigma)^2)) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 10))
+
+grid.arrange(p_log, p_n_opt, p_theta, p_sigma, ncol = 2, nrow = 2, heights = c(1, 0.9))
+```
+
+**Key observations on the effect of** $n$:
+
+-   **Theoretical validation:** The log-log plot provides strong empirical support for the theoretical relationship $h_{AMISE} \propto n^{-1/5}$. The estimated slope is **`r round(slope_est, 4)`**, which is very close to the theoretical value of $-0.2$. The high $R^2 = `r round(r_squared, 4)`$ indicates an excellent linear fit in log-log scale.
+
+-   **Interpretation:** As sample size increases, we have more information about the regression function, allowing us to use smaller bandwidths for more local (and thus more accurate) estimates. The $n^{-1/5}$ rate is optimal for nonparametric regression with twice-differentiable functions.
+
+-   **Optimal** $N$ scaling: The optimal number of blocks increases with $n$ until it reaches the cap at $N_{max} = 5$. For $n \geq 100$, we observe $N_{opt} \in \{1,2,3,4,5\}$, with larger $n$ generally preferring larger $N$. This makes sense: with more data, we can afford finer blocking without sacrificing statistical precision in each block.
+
+-   **Stability of estimates:** Both $\hat{\theta}_{22}$ and $\hat{\sigma}^2$ stabilize as $n$ increases, with $\hat{\sigma}^2$ consistently close to the true value $\sigma^2 = 0.15$. The slight variations are due to random sampling and the bias-variance trade-off in the polynomial approximation.
+
+\newpage
+
+## Study 3: Effect of $X$ Distribution (Beta Parameters)
+
+Finally, we investigate how the shape of the covariate distribution affects the optimal bandwidth. Different Beta parameters lead to vastly different density shapes, from uniform to highly skewed to U-shaped distributions.
+
+```{r study3}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-width: 14
+#| fig-height: 12
+#| fig-cap: "Comprehensive visualization of Beta distribution effects. Top: Heatmap showing how h_AMISE varies across different (α,β) combinations. Bottom four panels: Sample data and true regression function for selected Beta distributions, showing how data density varies across the support."
+
+n_fixed <- 1000
+
+beta_configs <- list(
+  "Uniform (α=β=1)" = c(1, 1),
+  "Symmetric weak (α=β=2)" = c(2, 2),
+  "Symmetric moderate (α=β=5)" = c(5, 5),
+  "Symmetric strong (α=β=10)" = c(10, 10),
+  "Right-skewed weak (α<β)" = c(2, 5),
+  "Right-skewed strong (α<β)" = c(2, 8),
+  "Left-skewed weak (α>β)" = c(5, 2),
+  "Left-skewed strong (α>β)" = c(8, 2),
+  "U-shaped (α=β<1)" = c(0.5, 0.5)
+)
+
+results_beta <- data.frame()
+
+for (config_name in names(beta_configs)) {
+  params <- beta_configs[[config_name]]
+  set.seed(42 + which(names(beta_configs) == config_name))
+  data <- generate_data(n_fixed, params[1], params[2], sigma2_true)
+  N_opt <- find_optimal_N(data)
+  est <- block_method(data, N_opt)
+  h_AMISE <- compute_h_AMISE(n_fixed, est$sigma2, est$theta_22)
+  
+  results_beta <- rbind(results_beta, data.frame(
+    Configuration = config_name,
+    alpha = params[1],
+    beta = params[2],
+    h_AMISE = h_AMISE,
+    N_opt = N_opt
+  ))
+}
+
+kable(results_beta, digits = 4,
+      col.names = c("Configuration", "α", "β", "h_{AMISE}", "N_{opt}"))
+
+# Heatmap
+alpha_seq <- seq(0.5, 10, length.out = 25)
+beta_seq <- seq(0.5, 10, length.out = 25)
+grid_results <- expand.grid(alpha = alpha_seq, beta = beta_seq)
+grid_results$h_AMISE <- NA
+
+for (i in 1:nrow(grid_results)) {
+  tryCatch({
+    set.seed(1000 + i)
+    data <- generate_data(n_fixed, grid_results$alpha[i], grid_results$beta[i], sigma2_true)
+    N_opt <- find_optimal_N(data)
+    est <- block_method(data, N_opt)
+    grid_results$h_AMISE[i] <- compute_h_AMISE(n_fixed, est$sigma2, est$theta_22)
+  }, error = function(e) {
+    grid_results$h_AMISE[i] <- NA
+  })
+}
+
+p_heatmap <- ggplot(grid_results, aes(x = alpha, y = beta, fill = h_AMISE)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "plasma", na.value = "gray90") +
+  labs(title = "Heatmap of h_AMISE by Beta Distribution Parameters",
+       subtitle = paste("n =", n_fixed, ", optimal N selected by Mallow's Cp"),
+       x = expression(alpha), y = expression(beta), fill = expression(h[AMISE])) +
+  theme_minimal() +
+  theme(legend.position = "right", plot.title = element_text(face = "bold", size = 12))
+
+plot_list <- list()
+for (i in 1:min(4, nrow(results_beta))) {
+  config <- results_beta[i, ]
+  set.seed(123)
+  data_sample <- generate_data(250, config$alpha, config$beta, sigma2_true)
+  
+  p_temp <- ggplot(data_sample, aes(x = X, y = Y)) +
+    geom_point(alpha = 0.5, size = 1.5, color = "steelblue") +
+    stat_function(fun = m_true, color = "darkred", linewidth = 1.2) +
+    labs(title = config$Configuration,
+         subtitle = sprintf("α=%.1f, β=%.1f, h=%.4f, N=%d", 
+                          config$alpha, config$beta, config$h_AMISE, config$N_opt)) +
+    theme_minimal() +
+    theme(plot.title = element_text(size = 10, face = "bold"))
+  
+  plot_list[[i]] <- p_temp
+}
+
+grid.arrange(p_heatmap, arrangeGrob(grobs = plot_list, ncol = 2), 
+             nrow = 2, heights = c(1.2, 1))
+```
+
+**Key observations on the effect of** $X$ distribution:
+
+-   **Symmetric vs. skewed distributions:** Symmetric distributions (where $\alpha = \beta$) generally result in more stable and smaller bandwidth estimates compared to highly skewed distributions.
+
+-   **Impact of skewness:** When $\alpha \neq \beta$, the distribution becomes skewed, concentrating data in certain regions. These sparse regions require larger bandwidths to gather enough observations for reliable estimation, thus increasing the global $h_{AMISE}$.
+
+-   **U-shaped distribution** ($\alpha = \beta = 0.5$): This creates a concentration of data near the boundaries with a sparse center, showing moderate $h_{AMISE}$ values.
+
+-   **Practical implications:** In applications with non-uniform covariate distributions, practitioners should consider adaptive (locally-varying) bandwidths rather than global ones.
+
+## General Conclusions
+
+1.  **Selection of** $N$: Mallow's $C_p$ criterion provides an effective way to select the number of blocks, balancing model complexity against fit quality.
+
+2.  **Scaling with** $n$: We empirically confirm the theoretical relationship $h_{AMISE} \propto n^{-1/5}$ with high precision, validating the asymptotic theory of nonparametric smoothing.
+
+3.  **Robustness to distribution:** The method is reasonably robust to different covariate distributions, though highly asymmetric distributions may require special considerations.
+
+4.  **Recommendations:** For practical applications, we recommend:
+
+    -   Use $N \approx n/20$ (capped at 5) as a starting point
+    -   Validate the selection with Mallow's $C_p$
+    -   Consider adaptive methods if the distribution of $X$ is very irregular
+
+## References
+
+Ruppert, D., Sheather, S. J., & Wand, M. P. (1995). An Effective Bandwidth Selector for Local Least Squares Regression. *Journal of the American Statistical Association*, 90(432), 1257-1270.
