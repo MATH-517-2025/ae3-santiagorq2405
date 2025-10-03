@@ -1,0 +1,40 @@
+# R and RStudio files
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Quarto/Rmarkdown
+/_cache/
+/_files/
+/.quarto/
+
+# Generated PDFs (except final report)
+Rplots.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+
+# Documentation files (optional - uncomment if you want to hide them)
+# README_*.md
+# INSTRUCTIONS.md
+# READY_TO_SUBMIT.md
+# FINAL_SUMMARY.txt
+
